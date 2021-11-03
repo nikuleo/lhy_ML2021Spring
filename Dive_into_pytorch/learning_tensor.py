@@ -29,7 +29,7 @@ torch.cat((X, y), dim=0)
 torch.cat((X, y), dim=1)
 
 # %%
-X - y
+X < y
 
 # %%
 y[1:3]
