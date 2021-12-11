@@ -59,7 +59,7 @@ def plot_pred(dv_set, model, lim=35., preds=None, targets=None):
 
 
 # 将训练集拆成训练集和验证集，默认值是0.25，可以调
-def _train_dev_split(X, Y, dev_ratio=0.1):
+def _train_dev_split(X, Y, dev_ratio=0.08):
     train_size = int(len(X) * (1 - dev_ratio))
     return X[:train_size], Y[:train_size], X[train_size:], Y[train_size:]  # 省略对列的操作，仅对行进行分割列不变
 
@@ -197,7 +197,7 @@ def save_pred(preds, file):
 if __name__ == '__main__':
     # 准备数据，设置参数
 
-    init_seed(233)
+    init_seed(2333)
 
     data_path = '../data/hw1/covid.train.csv'
     test_path = '../data/hw1/covid.test.csv'
@@ -214,12 +214,12 @@ if __name__ == '__main__':
     config = {
         'fold_num': 1,
         'n_epochs': 8000,
-        'batch_size': 128,
+        'batch_size': 64,
         'optimizer': 'SGD',
         'optim_hparas': {
-            'lr': 0.001,
-            'momentum': 0.8,
-            'weight_decay': 1e-4,
+            'lr': 0.0001,
+            'momentum': 0.9,
+            'weight_decay': 5e-4,
         },
         'early_stop': 500,
         'save_path': 'models/model.pth'
