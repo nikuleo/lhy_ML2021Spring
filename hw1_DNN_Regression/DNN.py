@@ -106,12 +106,19 @@ class NeuralNet(nn.Module):
     def __init__(self, input_dim):
         super(NeuralNet, self).__init__()
         self.net = nn.Sequential(
-            nn.Linear(input_dim, 256),
+
+            nn.Linear(input_dim, 512),
             nn.Dropout(p=0.5),  # 传入概率为0.5
-            nn.SiLU(),
+            nn.SiLU(inplace=True),
+
+            nn.Linear(512, 256),
+            nn.Dropout(p=0.5),  # 传入概率为0.5
+            nn.SiLU(inplace=True),
+
             nn.Linear(256, 128),
             nn.Dropout(p=0.5),  # 传入概率为0.5
-            nn.SiLU(),
+            nn.SiLU(inplace=True),
+
             nn.Linear(128, 1)
         )
 
@@ -122,6 +129,13 @@ class NeuralNet(nn.Module):
 
     def cal_loss(self, pred, target):
         return self.criterion(pred, target)
+
+
+# Xavier初始化参数
+def weight_init(m):
+    if isinstance(m, nn.Linear):
+        nn.init.xavier_normal_(m.weight)
+        nn.init.constant_(m.bias, 0)
 
 
 def dev(dv_set, model):
@@ -203,7 +217,7 @@ if __name__ == '__main__':
     test_path = '../data/hw1/covid.test.csv'
 
     all_x, all_y = data_prep(data_path, 'train')
-    train_x, train_y, dev_x, dev_y = _train_dev_split(all_x, all_y)
+    train_x, train_y, dev_x, dev_y = _train_dev_split(all_x, all_y, 0.1)
     test_x = data_prep(test_path, 'test')
 
     train_set = COVID19Dataset(train_x, train_y, 'train')
@@ -214,14 +228,14 @@ if __name__ == '__main__':
     config = {
         'fold_num': 1,
         'n_epochs': 8000,
-        'batch_size': 64,
+        'batch_size': 128,
         'optimizer': 'SGD',
         'optim_hparas': {
             'lr': 0.0001,
             'momentum': 0.9,
-            'weight_decay': 5e-4,
+            'weight_decay': 1e-4,
         },
-        'early_stop': 500,
+        'early_stop': 800,
         'save_path': 'models/model.pth'
     }
 
@@ -232,6 +246,7 @@ if __name__ == '__main__':
     # 训练
 
     model = NeuralNet(train_loader.dataset.dim).to('cuda')
+    model.apply(weight_init)
     model_loss, model_loss_record = train(train_loader, dev_loader, model, config)
 
     plot_learning_curve(model_loss_record, title='DNN')
