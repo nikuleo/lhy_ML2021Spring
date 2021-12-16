@@ -70,14 +70,16 @@ def data_prep(path, mode='train'):
         data = list(csv.reader(fp))
         data = np.array(data[1:])[:, 1:].astype(float)
 
-    feats = list(range(40)) + sorted([75, 57, 42, 60, 78, 43, 61, 79, 40, 58, 76, 41, 59, 77])
+    feats = [75, 57, 42, 60, 78, 43, 61, 79, 40, 58, 76, 41, 59, 77]
     if mode == 'test':
         data = data[:, feats]
     else:
         target = data[:, -1]
         data = data[:, feats]
 
-    data[:, 40:] = (data[:, 40:] - np.mean(data[:, 40:], axis=0)) / np.std(data[:, 40:], axis=0)
+    # data[:, 40:] = (data[:, 40:] - np.mean(data[:, 40:], axis=0)) / np.std(data[:, 40:], axis=0)
+    data[:, :] = (data[:, :] - np.mean(data[:, :], axis=0)) / np.std(data[:, :], axis=0)
+
     if mode == 'test':
         return data
     else:
@@ -107,19 +109,15 @@ class NeuralNet(nn.Module):
         super(NeuralNet, self).__init__()
         self.net = nn.Sequential(
 
-            nn.Linear(input_dim, 512),
+            nn.Linear(input_dim, 128),
             nn.Dropout(p=0.5),  # 传入概率为0.5
             nn.SiLU(inplace=True),
 
-            nn.Linear(512, 256),
+            nn.Linear(128, 64),
             nn.Dropout(p=0.5),  # 传入概率为0.5
             nn.SiLU(inplace=True),
 
-            nn.Linear(256, 128),
-            nn.Dropout(p=0.5),  # 传入概率为0.5
-            nn.SiLU(inplace=True),
-
-            nn.Linear(128, 1)
+            nn.Linear(64, 1)
         )
 
         self.criterion = nn.MSELoss(reduction='mean')  # reduction置为mean，该批次的总loss 除以mean
@@ -217,7 +215,7 @@ if __name__ == '__main__':
     test_path = '../data/hw1/covid.test.csv'
 
     all_x, all_y = data_prep(data_path, 'train')
-    train_x, train_y, dev_x, dev_y = _train_dev_split(all_x, all_y, 0.1)
+    train_x, train_y, dev_x, dev_y = _train_dev_split(all_x, all_y, 0.25)
     test_x = data_prep(test_path, 'test')
 
     train_set = COVID19Dataset(train_x, train_y, 'train')
@@ -228,14 +226,14 @@ if __name__ == '__main__':
     config = {
         'fold_num': 1,
         'n_epochs': 8000,
-        'batch_size': 128,
+        'batch_size': 64,
         'optimizer': 'SGD',
         'optim_hparas': {
             'lr': 0.0001,
             'momentum': 0.9,
             'weight_decay': 1e-4,
         },
-        'early_stop': 800,
+        'early_stop': 500,
         'save_path': 'models/model.pth'
     }
 
