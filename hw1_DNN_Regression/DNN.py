@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader, Dataset
 import torch.nn as nn
 from matplotlib.pyplot import figure
 import matplotlib.pyplot as plt
+from torch.utils.tensorboard import SummaryWriter
 
 
 # 保证模型可复现性
@@ -136,7 +137,7 @@ def weight_init(m):
         nn.init.constant_(m.bias, 0)
 
 
-def dev(dv_set, model):
+def dev(dv_set, model, writer, epoch):
     model.eval()
     total_loss = 0
     for x, y in dv_set:
@@ -144,12 +145,13 @@ def dev(dv_set, model):
         with torch.no_grad():
             pred = model(x)
             mse_loss = model.cal_loss(pred, y)
+            writer.add_scalar('Dev_Loss', mse_loss.item(), epoch)
         total_loss += mse_loss.detach().cpu().item() * len(x)  # 因为pytorch的loss计算默认取一批数据的平均值所以要乘回来
     total_loss = total_loss / len(dv_set.dataset)
     return total_loss
 
 
-def train(tr_set, dv_set, model, cfg):
+def train(tr_set, dv_set, model, cfg, writer):
     n_epochs = cfg['n_epochs']
     optimizer = getattr(torch.optim, cfg['optimizer'])(model.parameters(), **cfg['optim_hparas'])
     min_mse = 1000.
@@ -163,11 +165,12 @@ def train(tr_set, dv_set, model, cfg):
             x, y = x.to('cuda'), y.to('cuda')
             pred = model(x)
             mse_loss = model.cal_loss(pred, y)
+            writer.add_scalar('Tr_Loss', mse_loss.item(), epoch)
             mse_loss.backward()
             optimizer.step()
             loss_record['train'].append(mse_loss.detach().cpu().item())  # .detach()将tensor从计算图拷贝出来，.item() 取tensor中的数值
 
-        dev_mse = dev(dv_set, model)
+        dev_mse = dev(dv_set, model, writer, epoch)
         if dev_mse < min_mse:
             min_mse = dev_mse
             print('Saving model (epoch = {:4d}, train loss = {:.4f}, dev loss = {:4f})'.format(epoch + 1, mse_loss,
@@ -234,18 +237,20 @@ if __name__ == '__main__':
             'weight_decay': 1e-4,
         },
         'early_stop': 500,
-        'save_path': 'models/model.pth'
+        'save_path': 'models/model.pth',
+        'writer_path': './writer'
     }
 
     train_loader = DataLoader(train_set, batch_size=config['batch_size'], shuffle=True, drop_last=False)
     dev_loader = DataLoader(dev_set, batch_size=config['batch_size'], shuffle=False, drop_last=False)
     test_loader = DataLoader(test_set, batch_size=config['batch_size'], shuffle=False, drop_last=False)
 
-    # 训练
+    writer = SummaryWriter(config['writer_path'])
 
+    # 训练
     model = NeuralNet(train_loader.dataset.dim).to('cuda')
     model.apply(weight_init)
-    model_loss, model_loss_record = train(train_loader, dev_loader, model, config)
+    model_loss, model_loss_record = train(train_loader, dev_loader, model, config, writer)
 
     plot_learning_curve(model_loss_record, title='DNN')
 
@@ -253,6 +258,12 @@ if __name__ == '__main__':
     model = NeuralNet(train_loader.dataset.dim).to('cuda')
     ckpt = torch.load(config['save_path'], map_location='cpu')
     model.load_state_dict(ckpt)
+
+    dataiter = iter(train_loader)
+    dummy_datas, dummy_labels = dataiter.next()
+    writer.add_graph(model, dummy_datas.to('cuda'))
+    writer.close()
+
     plot_pred(dev_loader, model)
 
     # 测试
