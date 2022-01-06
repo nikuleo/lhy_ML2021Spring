@@ -13,15 +13,15 @@ import time
 
 # 参数设置
 config = {
-    'epoch': 30,
+    'epoch': 11,
     'batch_size': 128,
     'device': "cuda",
     'do_semi': True,
-    'threshord': 0.85,
+    'threshord': 0.9,
     'best_acc': 0.75,
     'optimizer': 'Adam',
     'optim_hparas': {
-        'lr': 0.0003,
+        'lr': 0.0001,
         'weight_decay': 1e-5,
     },
     'save_path': 'models/model.ckpt',
@@ -322,7 +322,7 @@ if __name__ == '__main__':
     test_loader = DataLoader(test_set, config['batch_size'], shuffle=False, num_workers=0)
 
     # model = CNNNet().to(device)
-    model = torchvision.models.resnet50(pretrained=True).to(device)
+    model = torchvision.models.resnet34(pretrained=True).to(device)
     num_ftrs = model.fc.in_features
     model.device = device
     for param in model.parameters():
