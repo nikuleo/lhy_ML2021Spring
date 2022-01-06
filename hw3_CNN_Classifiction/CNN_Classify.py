@@ -17,7 +17,7 @@ config = {
     'batch_size': 128,
     'device': "cuda",
     'do_semi': True,
-    'threshord': 0.8,
+    'threshord': 0.85,
     'best_acc': 0.75,
     'optimizer': 'Adam',
     'optim_hparas': {
@@ -46,10 +46,17 @@ def load_data(path, mode):
         ])
     }
 
-    data = DatasetFolder(path, loader=lambda x: Image.open(x), extensions="jpg", transform=data_tfm['test'])
+    def imgs_tfm(path):
+        x = Image.open(path)
+        x = x.resize((256, 256))
+        return x
+
+    # data = DatasetFolder(path, loader=lambda x: Image.open(x), extensions="jpg", transform=data_tfm['test'])
+    data = DatasetFolder(path, loader=imgs_tfm, extensions="jpg", transform=data_tfm['test'])
 
     if mode == 'train':
-        argu_data = DatasetFolder(path, loader=lambda x: Image.open(x), extensions="jpg", transform=data_tfm['train'])
+        # argu_data = DatasetFolder(path, loader=lambda x: Image.open(x), extensions="jpg", transform=data_tfm['train'])
+        argu_data = DatasetFolder(path, loader=imgs_tfm, extensions="jpg", transform=data_tfm['train'])
         data = ConcatDataset([data, argu_data])
 
     return data
@@ -315,7 +322,7 @@ if __name__ == '__main__':
     test_loader = DataLoader(test_set, config['batch_size'], shuffle=False, num_workers=0)
 
     # model = CNNNet().to(device)
-    model = torchvision.models.resnet18(pretrained=True).to(device)
+    model = torchvision.models.resnet50(pretrained=True).to(device)
     num_ftrs = model.fc.in_features
     model.device = device
     for param in model.parameters():
