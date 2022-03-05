@@ -1,1 +1,6 @@
 /data
+*.xml
+*.pth
+*.ckpt
+*.model
+*.png

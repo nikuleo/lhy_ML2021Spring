@@ -324,6 +324,7 @@ if __name__ == '__main__':
     # model = CNNNet().to(device)
     model = torchvision.models.resnet34(pretrained=True).to(device)
     num_ftrs = model.fc.in_features
+    model.fc = torch.nn.Linear(num_ftrs, 11)
     model.device = device
     for param in model.parameters():
         param.requires_grad = True
