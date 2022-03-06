@@ -4,3 +4,4 @@
 *.ckpt
 *.model
 *.png
+*.csv
