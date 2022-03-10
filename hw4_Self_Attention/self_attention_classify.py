@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import random
 from pathlib import Path
+from conformer import ConformerBlock
 from tqdm import tqdm
 from torch.optim import Optimizer
 from torch.optim import AdamW
@@ -54,28 +55,6 @@ class myDataset(Dataset):
         return self.speaker_num
 
 
-"""
-"n_mels": 40,
-"speakers": {
-     一个人的特征
-        "id10473": [
-                      {
-                        "feature_path": "uttr-5c88b2f1803449789c36f14fb4d3c1eb.pt",
-                        "mel_len": 652
-                      },
-                      {
-                        "feature_path": "uttr-022a67baccc54bfda3567a7ac282a7b8.pt",
-                        "mel_len": 564
-                      },
-                      ...
-                      ...
-                      ...
-                      ],
-                `````
-                ````
-"""
-
-
 def collate_batch(batch):
     mel, speaker = zip(*batch)
     mel = pad_sequence(mel, batch_first=True, padding_value=-20)
@@ -96,28 +75,99 @@ def get_dataloader(data_dir, batch_size, n_workers):
     return train_loader, valid_loader, speaker_num
 
 
+class Self_Attentive_Pooling(nn.Module):
+    def __init__(self, dim):
+        """SAP
+        Paper: Self-Attentive Speaker Embeddings for Text-Independent Speaker Verification
+        Link： https://danielpovey.com/files/2018_interspeech_xvector_attention.pdf
+        Args:
+            dim (pair): the size of attention weights
+        """
+        super(Self_Attentive_Pooling, self).__init__()
+        self.sap_linear = nn.Linear(dim, dim)
+        self.attention = nn.Parameter(torch.FloatTensor(dim, 1))
+
+    def forward(self, x):
+        """Computes Self-Attentive Pooling Module
+        Args:
+            x (torch.Tensor): Input tensor (#batch, dim, frames).
+        Returns:
+            torch.Tensor: Output tensor (#batch, dim)
+        """
+        x = x.permute(0, 2, 1)
+        h = torch.tanh(self.sap_linear(x))
+        w = torch.matmul(h, self.attention).squeeze(dim=2)
+        w = F.softmax(w, dim=1).view(x.size(0), x.size(1), 1)
+        x = torch.sum(x * w, dim=1)
+        return x
+
+
+class AMSoftmax(nn.Module):
+    '''
+    Additve Margin Softmax as proposed in:
+    https://arxiv.org/pdf/1801.05599.pdf
+    '''
+
+    def __init__(self, in_features, n_classes, s=30, m=0.4):
+        super(AMSoftmax, self).__init__()
+        self.linear = nn.Linear(in_features, n_classes, bias=False)
+        self.m = m
+        self.s = s
+
+    def _am_logsumexp(self, logits):
+        max_x = torch.max(logits, dim=-1)[0].unsqueeze(-1)
+        term1 = (self.s * (logits - (max_x + self.m))).exp()
+        term2 = (self.s * (logits - max_x)).exp().sum(-1).unsqueeze(-1) - (self.s * (logits - max_x)).exp()
+        return self.s * max_x + (term1 + term2).log()
+
+    def forward(self, *inputs):
+        x_vector = F.normalize(inputs[0], p=2, dim=-1)
+        self.linear.weight.data = F.normalize(self.linear.weight.data, p=2, dim=-1)
+        logits = self.linear(x_vector)
+        scaled_logits = (logits - self.m) * self.s
+        return scaled_logits - self._am_logsumexp(logits)
+
+
 class Classifier(nn.Module):
-    def __init__(self, d_model=80, n_spks=600, dropout=0.1):
+    def __init__(self, d_model=256, n_spks=600, dropout=0.1):
         super().__init__()
         self.prenet = nn.Linear(40, d_model)
-        # TODO:
-        #   Change Transformer to Conformer.
-        #   https://arxiv.org/abs/2005.08100
-        self.encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, dim_feedforward=256, nhead=2)
 
-        self.pred_layer = nn.Sequential(
-            nn.Linear(d_model, d_model),
-            nn.ReLU(),
-            nn.Linear(d_model, n_spks),
+        self.conformer_block = ConformerBlock(
+            dim=d_model,
+            dim_head=64,
+            heads=8,
+            ff_mult=4,
+            conv_expansion_factor=2,
+            conv_kernel_size=31,
+            attn_dropout=dropout,
+            ff_dropout=dropout,
+            conv_dropout=dropout
         )
+
+        self.encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, dim_feedforward=256, nhead=2)
+        # self.pred_layer = nn.Sequential(
+        #     nn.Linear(d_model, n_spks),
+        # )
+
+        self.pooling = Self_Attentive_Pooling(d_model)
+
+        self.pred_layer = AMSoftmax(in_features=d_model, n_classes=n_spks)
 
     def forward(self, mels):
         out = self.prenet(mels)
         out = out.permute(1, 0, 2)
-        out = self.encoder_layer(out)
+        # out: (length, batch size, d_model)
+        # out = self.encoder_layer(out)
+        out = self.conformer_block(out)
+        """
+        mean pooling
         out = out.transpose(0, 1)
         stats = out.mean(dim=1)
-
+        """
+        out = out.permute(1, 2, 0)
+        # out: (batch size, length, d_model)
+        stats = self.pooling(out)
         out = self.pred_layer(stats)
         return out
 

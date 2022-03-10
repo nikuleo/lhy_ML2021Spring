@@ -86,7 +86,7 @@ def main(
     with open(output_path, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerows(results)
-
+    print(f"[Info]: 输出完成!", flush=True)
 
 if __name__ == "__main__":
     main(**parse_args())
