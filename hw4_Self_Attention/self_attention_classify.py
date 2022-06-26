@@ -13,6 +13,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import Dataset, DataLoader, random_split
 from torch.nn.utils.rnn import pad_sequence
+from torch.utils.tensorboard import SummaryWriter
 
 
 class myDataset(Dataset):
@@ -220,8 +221,8 @@ def parse_args():
     config = {
         "data_dir": "../data/hw4/Dataset",
         "save_path": "model.ckpt",
-        "batch_size": 32,
-        "n_workers": 0,
+        "batch_size": 128,
+        "n_workers": 8,
         "valid_steps": 2000,
         "warmup_steps": 1000,
         "save_steps": 10000,
@@ -235,18 +236,20 @@ def main(data_dir, save_path, batch_size, n_workers, valid_steps, warmup_steps, 
 
     train_loader, valid_loader, speaker_num = get_dataloader(data_dir, batch_size, n_workers)
     train_iterator = iter(train_loader)
-    print(f"[Info]: 完成加载dataloader！", flush=True)
+    print(f"[Info]: 完成加载 dataloader！", flush=True)
 
     model = Classifier(n_spks=speaker_num).to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = AdamW(model.parameters(), lr=1e-3)
     scheduler = get_cosine_schedule_with_warmup(optimizer, warmup_steps, total_steps)
-    print(f"[Info]: 完成实例化模型！", flush=True)
+    print(f"[Info]: 完成 warmup！", flush=True)
 
     best_accuracy = -1.0
     best_state_dict = None
+    count_valid_step = 0
 
     pbar = tqdm(total=valid_steps, ncols=0, desc="Train", unit=" step")
+    writer = SummaryWriter(log_dir="logs/hw4", flush_secs=120)
 
     for step in range(total_steps):
         try:
@@ -265,21 +268,30 @@ def main(data_dir, save_path, batch_size, n_workers, valid_steps, warmup_steps, 
 
         pbar.update()
         pbar.set_postfix(loss=f"{batch_loss:.2f}", accuracy=f"{batch_accuracy:.2f}", step=step + 1)
-
+        writer.add_scalars(main_tag='train/loss',
+                           tag_scalar_dict={'loss': batch_loss},
+                           global_step=step+1)
+        writer.add_scalars(main_tag='train/acc',
+                           tag_scalar_dict={'acc': batch_accuracy},
+                           global_step=step+1)
         if (step + 1) % valid_steps == 0:
             pbar.close()
 
             valid_accuracy = valid(valid_loader, model, criterion, device)
+            count_valid_step += 1
             if valid_accuracy > best_accuracy:
                 best_accuracy = valid_accuracy
                 best_state_dict = model.state_dict()
 
             pbar = tqdm(total=valid_steps, ncols=0, desc="Train", unit=" step")
-
+            writer.add_scalars(main_tag='dev/acc',
+                               tag_scalar_dict={'acc': valid_accuracy},
+                               global_step=count_valid_step)
         if (step + 1) % save_steps == 0 and best_state_dict is not None:
             torch.save(best_state_dict, save_path)
             pbar.write(f"Step {step + 1}, best model saved. (accuracy={best_accuracy:.4f})")
     pbar.close()
+    writer.close()
 
 
 if __name__ == '__main__':

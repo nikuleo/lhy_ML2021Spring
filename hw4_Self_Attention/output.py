@@ -5,7 +5,6 @@ import csv
 from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 from tqdm.notebook import tqdm
-
 from hw4_Self_Attention.self_attention_classify import Classifier
 
 
@@ -87,6 +86,7 @@ def main(
         writer = csv.writer(csvfile)
         writer.writerows(results)
     print(f"[Info]: 输出完成!", flush=True)
+
 
 if __name__ == "__main__":
     main(**parse_args())

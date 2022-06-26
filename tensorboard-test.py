@@ -2,7 +2,7 @@ import time
 from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 
-
+# tensorboard --logdir=logs
 def add_scalars(writer):
     r = 5
     for i in range(100):
