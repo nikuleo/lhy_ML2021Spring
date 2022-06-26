@@ -25,7 +25,7 @@ config = {
         'weight_decay': 1e-5,
     },
     'save_path': 'models/model.ckpt',
-    'log_path': 'models/log',
+    'log_path': 'models/logs',
     'checkpoint_path': 'models/ckpt.pth',
     'remuse': False,
 }
